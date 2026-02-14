@@ -1,0 +1,837 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PLO-6 Triple Board Calculator</title>
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg: #0d1117; --panel: #161b22; --border: #30363d; --accent: #0f9b58;
+  --accent-hover: #12b86a; --text: #e6edf3; --text-dim: #c9d1d9;
+  --red: #e74c3c; --yellow: #f1c40f; --green: #2ecc71;
+  --card-bg: #f0f0f0; --card-border: #999;
+}
+body { font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 12px; }
+h1 { font-size: 1.6em; text-align: center; color: var(--accent); margin-bottom: 2px; }
+.subtitle { text-align: center; color: var(--text-dim); font-size: 0.85em; margin-bottom: 16px; }
+.container { max-width: 900px; margin: 0 auto; }
+
+/* Panels */
+.panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 14px; margin-bottom: 12px; }
+.panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; flex-wrap: wrap; gap: 6px; }
+.panel-title { font-size: 1em; font-weight: 600; color: var(--accent); }
+
+/* Buttons */
+.btn { display: inline-flex; align-items: center; gap: 4px; padding: 6px 14px; border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--text); font-size: 0.82em; cursor: pointer; transition: all 0.15s; }
+.btn:hover { border-color: var(--accent); color: var(--accent); }
+.btn:disabled { opacity: 0.35; cursor: default; pointer-events: none; }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-danger { border-color: var(--red); color: var(--red); }
+.btn-danger:hover { background: var(--red); color: #fff; }
+.btn-sm { padding: 4px 10px; font-size: 0.78em; }
+
+/* Player rows */
+.player-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.player-label { min-width: 70px; font-size: 0.85em; font-weight: 600; color: var(--text-dim); }
+
+/* Card slots */
+.card-slots { display: flex; gap: 4px; flex-wrap: wrap; }
+.card-slot {
+  width: 44px; height: 60px; border: 2px dashed var(--border); border-radius: 6px;
+  display: flex; align-items: center; justify-content: center; flex-direction: column;
+  cursor: pointer; transition: all 0.15s; background: transparent; font-size: 0.7em; color: var(--text-dim);
+}
+.card-slot:hover { border-color: var(--text-dim); }
+.card-slot.active { border-color: var(--accent); box-shadow: 0 0 8px rgba(15,155,88,0.5); border-style: solid; }
+.card-slot.filled {
+  background: var(--card-bg); border: 2px solid var(--card-border); border-style: solid;
+  cursor: pointer; position: relative;
+}
+.card-slot.filled .card-rank { font-size: 1.15em; font-weight: 700; font-family: 'Courier New', monospace; line-height: 1; }
+.card-slot.filled .card-suit { font-size: 1.05em; line-height: 1; }
+.card-slot.filled.suit-red { color: var(--red); }
+.card-slot.filled.suit-black { color: #1a1a2e; }
+
+/* Board section */
+.board-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.board-label { min-width: 60px; font-size: 0.85em; font-weight: 600; color: var(--text-dim); }
+.board-cards { display: flex; gap: 3px; }
+.board-cards .card-slot { width: 48px; height: 64px; }
+.board-divider { width: 2px; height: 40px; background: var(--accent); border-radius: 2px; margin: 0 2px; align-self: center; opacity: 0.4; }
+
+/* Card Picker */
+.picker-grid { display: grid; grid-template-columns: repeat(13, 1fr); gap: 3px; margin-top: 8px; }
+.picker-card {
+  aspect-ratio: 0.72; border-radius: 5px; display: flex; align-items: center; justify-content: center;
+  flex-direction: column; cursor: pointer; transition: all 0.12s; font-family: 'Courier New', monospace;
+  background: var(--card-bg); border: 2px solid transparent; font-size: 0.88em; line-height: 1.15;
+}
+.picker-card:hover:not(.used):not(.disabled) { border-color: var(--accent); transform: scale(1.08); z-index: 1; }
+.picker-card.used { opacity: 0.15; cursor: default; pointer-events: none; }
+.picker-card.disabled { opacity: 0.15; cursor: default; }
+.picker-card .p-rank { font-weight: 700; font-size: 1.2em; }
+.picker-card .p-suit { font-size: 1.15em; }
+.picker-card.suit-red { color: var(--red); }
+.picker-card.suit-black { color: #1a1a2e; }
+.suit-row-label { font-size: 0.8em; color: var(--text-dim); text-align: center; padding: 4px 0 2px; }
+
+/* Text input mode */
+.text-input-area { display: none; margin-top: 10px; }
+.text-input-area.visible { display: block; }
+.text-input-area label { display: block; font-size: 0.82em; color: var(--text-dim); margin-bottom: 3px; }
+.text-input-area input { width: 100%; padding: 6px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 5px; color: var(--text); font-family: 'Courier New', monospace; font-size: 0.9em; margin-bottom: 6px; }
+.text-input-area input:focus { outline: none; border-color: var(--accent); }
+.text-input-area .text-row { display: flex; gap: 8px; align-items: center; margin-bottom: 4px; flex-wrap: wrap; }
+.text-input-area .text-row label { min-width: 70px; margin-bottom: 0; }
+.text-input-area .text-row input { flex: 1; min-width: 150px; margin-bottom: 0; }
+
+/* Controls */
+.controls { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.sim-select { padding: 6px 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); font-size: 0.82em; }
+.sim-select:focus { outline: none; border-color: var(--accent); }
+
+/* Results */
+.results-grid { display: grid; gap: 10px; margin-top: 10px; }
+.result-row { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.result-name { min-width: 70px; font-weight: 600; font-size: 0.9em; }
+.result-bars { flex: 1; min-width: 200px; display: flex; height: 28px; border-radius: 5px; overflow: hidden; background: var(--bg); }
+.result-bars .bar-win { background: var(--green); display: flex; align-items: center; justify-content: center; font-size: 0.7em; font-weight: 600; color: #fff; min-width: 0; transition: width 0.3s; }
+.result-bars .bar-draw { background: var(--yellow); display: flex; align-items: center; justify-content: center; font-size: 0.7em; font-weight: 600; color: #333; min-width: 0; transition: width 0.3s; }
+.result-bars .bar-lose { background: var(--red); display: flex; align-items: center; justify-content: center; font-size: 0.7em; font-weight: 600; color: #fff; min-width: 0; transition: width 0.3s; }
+.result-nums { display: flex; gap: 12px; font-size: 0.82em; min-width: 260px; }
+.result-nums span { display: flex; align-items: center; gap: 3px; }
+.result-nums .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+.dot-w { background: var(--green); }
+.dot-d { background: var(--yellow); }
+.dot-l { background: var(--red); }
+
+/* Progress */
+.progress-wrap { margin-top: 10px; display: none; }
+.progress-wrap.visible { display: block; }
+.progress-bar-outer { width: 100%; height: 8px; background: var(--bg); border-radius: 4px; overflow: hidden; }
+.progress-bar-inner { height: 100%; background: var(--accent); width: 0%; transition: width 0.1s; }
+.progress-text { font-size: 0.78em; color: var(--text-dim); margin-top: 3px; }
+
+/* Mobile */
+@media (max-width: 600px) {
+  body { padding: 6px; }
+  .card-slot { width: 38px; height: 52px; }
+  .board-cards .card-slot { width: 42px; height: 56px; }
+  .picker-grid { grid-template-columns: repeat(13, 1fr); gap: 2px; }
+  .picker-card { font-size: 0.6em; }
+  .result-nums { min-width: auto; flex-wrap: wrap; gap: 6px; }
+  .player-label, .board-label { min-width: 55px; font-size: 0.78em; }
+}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>PLO-6 Triple Board Calculator</h1>
+  <p class="subtitle">6-Card Omaha &bull; 3 Boards &bull; Most Points Wins &bull; Use exactly 2 hole cards + 3 board cards</p>
+
+  <!-- Players -->
+  <div class="panel" id="players-panel">
+    <div class="panel-header">
+      <span class="panel-title">Players</span>
+      <div>
+        <button class="btn btn-sm" id="btn-remove-player">- Remove</button>
+        <button class="btn btn-sm" id="btn-add-player">+ Add</button>
+      </div>
+    </div>
+    <div id="players-area"></div>
+  </div>
+
+  <!-- Boards -->
+  <div class="panel" id="boards-panel">
+    <div class="panel-header">
+      <span class="panel-title">Triple Board</span>
+    </div>
+    <div id="boards-area"></div>
+  </div>
+
+  <!-- Card Picker -->
+  <div class="panel" id="picker-panel">
+    <div class="panel-header">
+      <span class="panel-title">Card Picker</span>
+      <button class="btn btn-sm" id="btn-toggle-input">Switch to Text Input</button>
+    </div>
+    <div id="picker-area">
+      <div id="picker-grid" class="picker-grid"></div>
+    </div>
+    <div id="text-input-area" class="text-input-area"></div>
+  </div>
+
+  <!-- Controls -->
+  <div class="panel">
+    <div class="controls">
+      <button class="btn btn-primary" id="btn-run">Run Simulation</button>
+      <select class="sim-select" id="sim-count">
+        <option value="10000">10,000 sims</option>
+        <option value="25000">25,000 sims</option>
+        <option value="50000" selected>50,000 sims</option>
+        <option value="100000">100,000 sims</option>
+        <option value="200000">200,000 sims</option>
+      </select>
+      <button class="btn" id="btn-deal">Deal Remaining</button>
+      <button class="btn btn-danger" id="btn-clear">Clear All</button>
+    </div>
+    <div class="progress-wrap" id="progress-wrap">
+      <div class="progress-bar-outer"><div class="progress-bar-inner" id="progress-bar"></div></div>
+      <div class="progress-text" id="progress-text"></div>
+    </div>
+  </div>
+
+  <!-- Results -->
+  <div class="panel" id="results-panel" style="display:none;">
+    <div class="panel-header">
+      <span class="panel-title">Results</span>
+      <span id="results-time" style="font-size:0.78em; color:var(--text-dim);"></span>
+    </div>
+    <div class="results-grid" id="results-grid"></div>
+  </div>
+</div>
+
+<script>
+// ── Constants ──────────────────────────────────────────────────────────────
+const RANKS_STR = "23456789TJQKA";
+const SUITS_STR = "shdc";
+const SUIT_SYMBOLS = ["\u2660", "\u2665", "\u2666", "\u2663"];
+const RANK_CHARS = "23456789TJQKA".split("");
+const SUIT_NAMES = ["Spades","Hearts","Diamonds","Clubs"];
+
+function cardRank(c) { return c >> 2; }
+function cardSuit(c) { return c & 3; }
+function cardRankChar(c) { return RANK_CHARS[c >> 2]; }
+function cardSuitSymbol(c) { return SUIT_SYMBOLS[c & 3]; }
+function isRedSuit(c) { const s = c & 3; return s === 1 || s === 2; }
+function encodeCard(rankIdx, suitIdx) { return rankIdx * 4 + suitIdx; }
+function parseCardStr(r, s) {
+  const ri = RANKS_STR.indexOf(r.toUpperCase());
+  const si = SUITS_STR.indexOf(s.toLowerCase());
+  if (ri < 0 || si < 0) return -1;
+  return ri * 4 + si;
+}
+
+// ── State ──────────────────────────────────────────────────────────────────
+const state = {
+  numPlayers: 2,
+  players: [Array(6).fill(null), Array(6).fill(null)],
+  boards: [Array(5).fill(null), Array(5).fill(null), Array(5).fill(null)],
+  activeSlot: null, // {type:'player'|'board', index, cardIndex}
+  inputMode: 'picker',
+  running: false,
+  results: null,
+};
+
+function usedCards() {
+  const s = new Set();
+  for (const p of state.players) for (const c of p) if (c !== null) s.add(c);
+  for (const b of state.boards) for (const c of b) if (c !== null) s.add(c);
+  return s;
+}
+
+function allPlayersHave6() {
+  for (let i = 0; i < state.numPlayers; i++) {
+    if (state.players[i].some(c => c === null)) return false;
+  }
+  return true;
+}
+
+// ── Render ─────────────────────────────────────────────────────────────────
+function renderSlot(card, isActive) {
+  if (card === null) {
+    return `<div class="slot-empty">+</div>`;
+  }
+  const rc = isRedSuit(card) ? 'suit-red' : 'suit-black';
+  return `<span class="card-rank">${cardRankChar(card)}</span><span class="card-suit">${cardSuitSymbol(card)}</span>`;
+}
+
+function renderPlayers() {
+  const area = document.getElementById('players-area');
+  let html = '';
+  for (let p = 0; p < state.numPlayers; p++) {
+    html += `<div class="player-row"><div class="player-label">Player ${p + 1}</div><div class="card-slots">`;
+    for (let c = 0; c < 6; c++) {
+      const card = state.players[p][c];
+      const isActive = state.activeSlot && state.activeSlot.type === 'player' && state.activeSlot.index === p && state.activeSlot.cardIndex === c;
+      const filled = card !== null;
+      const colorClass = filled ? (isRedSuit(card) ? 'suit-red' : 'suit-black') : '';
+      html += `<div class="card-slot ${isActive ? 'active' : ''} ${filled ? 'filled' : ''} ${colorClass}" data-type="player" data-index="${p}" data-ci="${c}">`;
+      if (filled) {
+        html += `<span class="card-rank">${cardRankChar(card)}</span><span class="card-suit">${cardSuitSymbol(card)}</span>`;
+      } else {
+        html += `<span style="font-size:1.1em;color:var(--text-dim);">+</span>`;
+      }
+      html += `</div>`;
+    }
+    html += `</div></div>`;
+  }
+  area.innerHTML = html;
+
+  // Bind click
+  area.querySelectorAll('.card-slot').forEach(el => {
+    el.addEventListener('click', () => {
+      const t = el.dataset.type;
+      const idx = parseInt(el.dataset.index);
+      const ci = parseInt(el.dataset.ci);
+      const card = state.players[idx][ci];
+      if (card !== null) {
+        // Remove card
+        state.players[idx][ci] = null;
+        state.results = null;
+        render();
+        return;
+      }
+      state.activeSlot = { type: t, index: idx, cardIndex: ci };
+      render();
+    });
+  });
+
+  // Update add/remove buttons
+  document.getElementById('btn-add-player').disabled = state.numPlayers >= 6;
+  document.getElementById('btn-remove-player').disabled = state.numPlayers <= 2;
+}
+
+function renderBoards() {
+  const area = document.getElementById('boards-area');
+  let html = '';
+  for (let b = 0; b < 3; b++) {
+    html += `<div class="board-row"><div class="board-label">Board ${b + 1}</div><div class="board-cards">`;
+    for (let c = 0; c < 5; c++) {
+      const card = state.boards[b][c];
+      const isActive = state.activeSlot && state.activeSlot.type === 'board' && state.activeSlot.index === b && state.activeSlot.cardIndex === c;
+      const filled = card !== null;
+      const colorClass = filled ? (isRedSuit(card) ? 'suit-red' : 'suit-black') : '';
+      // Add divider after flop (card index 2)
+      if (c === 3 || c === 4) {
+        html += `<div class="board-divider"></div>`;
+      }
+      html += `<div class="card-slot ${isActive ? 'active' : ''} ${filled ? 'filled' : ''} ${colorClass}" data-type="board" data-index="${b}" data-ci="${c}">`;
+      if (filled) {
+        html += `<span class="card-rank">${cardRankChar(card)}</span><span class="card-suit">${cardSuitSymbol(card)}</span>`;
+      } else {
+        html += `<span style="font-size:1.1em;color:var(--text-dim);">+</span>`;
+      }
+      html += `</div>`;
+    }
+    html += `</div></div>`;
+  }
+  area.innerHTML = html;
+
+  area.querySelectorAll('.card-slot').forEach(el => {
+    el.addEventListener('click', () => {
+      const t = el.dataset.type;
+      const idx = parseInt(el.dataset.index);
+      const ci = parseInt(el.dataset.ci);
+      const card = state.boards[idx][ci];
+      if (card !== null) {
+        state.boards[idx][ci] = null;
+        state.results = null;
+        render();
+        return;
+      }
+      state.activeSlot = { type: t, index: idx, cardIndex: ci };
+      render();
+    });
+  });
+}
+
+function renderPicker() {
+  const grid = document.getElementById('picker-grid');
+  const used = usedCards();
+  let html = '';
+  // Layout: 4 rows (suits) x 13 cols (ranks), order: A23456789TJKQ
+  const PICKER_ORDER = [12,0,1,2,3,4,5,6,7,8,9,11,10];
+  for (let s = 0; s < 4; s++) {
+    for (let ri = 0; ri < 13; ri++) {
+      const r = PICKER_ORDER[ri];
+      const card = encodeCard(r, s);
+      const isUsed = used.has(card);
+      const colorClass = (s === 1 || s === 2) ? 'suit-red' : 'suit-black';
+      html += `<div class="picker-card ${colorClass} ${isUsed ? 'used' : ''}" data-card="${card}">`;
+      html += `<span class="p-rank">${RANK_CHARS[r]}</span>`;
+      html += `<span class="p-suit">${SUIT_SYMBOLS[s]}</span>`;
+      html += `</div>`;
+    }
+  }
+  grid.innerHTML = html;
+
+  grid.querySelectorAll('.picker-card:not(.used)').forEach(el => {
+    el.addEventListener('click', () => {
+      const card = parseInt(el.dataset.card);
+      assignCard(card);
+    });
+  });
+}
+
+function renderTextInputs() {
+  const area = document.getElementById('text-input-area');
+  let html = '';
+  for (let p = 0; p < state.numPlayers; p++) {
+    const current = state.players[p].filter(c => c !== null).map(c => RANK_CHARS[c >> 2] + SUITS_STR[c & 3]).join('');
+    html += `<div class="text-row"><label>Player ${p + 1}:</label><input type="text" maxlength="12" placeholder="e.g. AhKsQdJc9s8d" data-type="player" data-index="${p}" value="${current}"></div>`;
+  }
+  for (let b = 0; b < 3; b++) {
+    const current = state.boards[b].filter(c => c !== null).map(c => RANK_CHARS[c >> 2] + SUITS_STR[c & 3]).join('');
+    html += `<div class="text-row"><label>Board ${b + 1}:</label><input type="text" maxlength="10" placeholder="e.g. Ks7h2d (0-5 cards)" data-type="board" data-index="${b}" value="${current}"></div>`;
+  }
+  html += `<button class="btn btn-sm" id="btn-apply-text" style="margin-top:6px;">Apply</button>`;
+  area.innerHTML = html;
+
+  document.getElementById('btn-apply-text').addEventListener('click', applyTextInputs);
+}
+
+function renderResults() {
+  const panel = document.getElementById('results-panel');
+  if (!state.results) { panel.style.display = 'none'; return; }
+  panel.style.display = 'block';
+  const grid = document.getElementById('results-grid');
+  let html = '';
+  for (let p = 0; p < state.numPlayers; p++) {
+    const r = state.results[p];
+    const wPct = r.win.toFixed(1);
+    const dPct = r.draw.toFixed(1);
+    const lPct = r.lose.toFixed(1);
+    html += `<div class="result-row">
+      <div class="result-name">Player ${p + 1}</div>
+      <div class="result-bars">
+        <div class="bar-win" style="width:${r.win}%">${r.win >= 5 ? wPct + '%' : ''}</div>
+        <div class="bar-draw" style="width:${r.draw}%">${r.draw >= 5 ? dPct + '%' : ''}</div>
+        <div class="bar-lose" style="width:${r.lose}%">${r.lose >= 5 ? lPct + '%' : ''}</div>
+      </div>
+      <div class="result-nums">
+        <span><span class="dot dot-w"></span> Win ${wPct}%</span>
+        <span><span class="dot dot-d"></span> Draw ${dPct}%</span>
+        <span><span class="dot dot-l"></span> Lose ${lPct}%</span>
+      </div>
+    </div>`;
+  }
+  grid.innerHTML = html;
+}
+
+function render() {
+  renderPlayers();
+  renderBoards();
+  renderPicker();
+  if (state.inputMode === 'text') renderTextInputs();
+  renderResults();
+
+  // Run button state
+  document.getElementById('btn-run').disabled = !allPlayersHave6() || state.running;
+}
+
+// ── Card Assignment ────────────────────────────────────────────────────────
+function assignCard(card) {
+  if (!state.activeSlot) {
+    // Auto-find first empty slot
+    state.activeSlot = findNextEmpty(null);
+    if (!state.activeSlot) return;
+  }
+
+  const { type, index, cardIndex } = state.activeSlot;
+  if (type === 'player') {
+    state.players[index][cardIndex] = card;
+  } else {
+    state.boards[index][cardIndex] = card;
+  }
+  state.results = null;
+
+  // Auto-advance to next empty slot
+  state.activeSlot = findNextEmpty(state.activeSlot);
+  render();
+}
+
+function findNextEmpty(after) {
+  // Search order: current player/board remaining slots, then next player, then boards
+  let startType, startIdx, startCi;
+  if (after) {
+    startType = after.type;
+    startIdx = after.index;
+    startCi = after.cardIndex + 1;
+  } else {
+    startType = 'player';
+    startIdx = 0;
+    startCi = 0;
+  }
+
+  // Search players
+  if (startType === 'player') {
+    for (let p = startIdx; p < state.numPlayers; p++) {
+      const ci0 = (p === startIdx) ? startCi : 0;
+      for (let c = ci0; c < 6; c++) {
+        if (state.players[p][c] === null) return { type: 'player', index: p, cardIndex: c };
+      }
+    }
+    // Fall through to boards
+    startType = 'board';
+    startIdx = 0;
+    startCi = 0;
+  }
+
+  // Search boards
+  if (startType === 'board') {
+    for (let b = startIdx; b < 3; b++) {
+      const ci0 = (b === startIdx) ? startCi : 0;
+      for (let c = ci0; c < 5; c++) {
+        if (state.boards[b][c] === null) return { type: 'board', index: b, cardIndex: c };
+      }
+    }
+  }
+
+  // Wrap around: search from beginning
+  for (let p = 0; p < state.numPlayers; p++) {
+    for (let c = 0; c < 6; c++) {
+      if (state.players[p][c] === null) return { type: 'player', index: p, cardIndex: c };
+    }
+  }
+  for (let b = 0; b < 3; b++) {
+    for (let c = 0; c < 5; c++) {
+      if (state.boards[b][c] === null) return { type: 'board', index: b, cardIndex: c };
+    }
+  }
+
+  return null; // all filled
+}
+
+// ── Text Input ─────────────────────────────────────────────────────────────
+function applyTextInputs() {
+  const area = document.getElementById('text-input-area');
+  const inputs = area.querySelectorAll('input');
+  // Clear all first
+  for (let p = 0; p < 6; p++) if (state.players[p]) state.players[p].fill(null);
+  for (let b = 0; b < 3; b++) state.boards[b].fill(null);
+
+  const allCards = new Set();
+  let error = null;
+
+  inputs.forEach(inp => {
+    const type = inp.dataset.type;
+    const idx = parseInt(inp.dataset.index);
+    const text = inp.value.trim().replace(/\s/g, '');
+    if (!text) return;
+    if (text.length % 2 !== 0) { error = `Invalid input for ${type} ${idx + 1}`; return; }
+    const cards = [];
+    for (let i = 0; i < text.length; i += 2) {
+      const c = parseCardStr(text[i], text[i + 1]);
+      if (c < 0) { error = `Invalid card "${text.substr(i, 2)}" in ${type} ${idx + 1}`; return; }
+      if (allCards.has(c)) { error = `Duplicate card ${text.substr(i, 2)}`; return; }
+      allCards.add(c);
+      cards.push(c);
+    }
+    if (error) return;
+
+    if (type === 'player') {
+      if (cards.length !== 6) { error = `Player ${idx + 1} needs 6 cards, got ${cards.length}`; return; }
+      for (let i = 0; i < 6; i++) state.players[idx][i] = cards[i];
+    } else {
+      if (cards.length > 5) { error = `Board ${idx + 1} max 5 cards, got ${cards.length}`; return; }
+      for (let i = 0; i < cards.length; i++) state.boards[idx][i] = cards[i];
+    }
+  });
+
+  if (error) {
+    alert(error);
+    return;
+  }
+  state.results = null;
+  state.activeSlot = null;
+  render();
+}
+
+// ── Controls ───────────────────────────────────────────────────────────────
+function dealRemaining() {
+  const used = usedCards();
+  const deck = [];
+  for (let i = 0; i < 52; i++) if (!used.has(i)) deck.push(i);
+  // Shuffle
+  for (let i = deck.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [deck[i], deck[j]] = [deck[j], deck[i]];
+  }
+  let di = 0;
+  for (let p = 0; p < state.numPlayers; p++) {
+    for (let c = 0; c < 6; c++) {
+      if (state.players[p][c] === null && di < deck.length) state.players[p][c] = deck[di++];
+    }
+  }
+  for (let b = 0; b < 3; b++) {
+    for (let c = 0; c < 5; c++) {
+      if (state.boards[b][c] === null && di < deck.length) state.boards[b][c] = deck[di++];
+    }
+  }
+  state.activeSlot = null;
+  state.results = null;
+  render();
+}
+
+function clearAll() {
+  for (let p = 0; p < state.players.length; p++) state.players[p].fill(null);
+  for (let b = 0; b < 3; b++) state.boards[b].fill(null);
+  state.activeSlot = null;
+  state.results = null;
+  document.getElementById('results-panel').style.display = 'none';
+  render();
+}
+
+function addPlayer() {
+  if (state.numPlayers >= 6) return;
+  state.numPlayers++;
+  if (state.players.length < state.numPlayers) state.players.push(Array(6).fill(null));
+  else state.players[state.numPlayers - 1] = Array(6).fill(null);
+  state.results = null;
+  render();
+}
+
+function removePlayer() {
+  if (state.numPlayers <= 2) return;
+  // Clear the last player's cards
+  state.players[state.numPlayers - 1].fill(null);
+  state.numPlayers--;
+  state.activeSlot = null;
+  state.results = null;
+  render();
+}
+
+// ── Web Worker (inline) ───────────────────────────────────────────────────
+const workerCode = `
+const HOLE_COMBOS = [];
+for (let i = 0; i < 6; i++) for (let j = i + 1; j < 6; j++) HOLE_COMBOS.push(i, j);
+const BOARD_COMBOS = [];
+for (let i = 0; i < 5; i++) for (let j = i + 1; j < 5; j++) for (let k = j + 1; k < 5; k++) BOARD_COMBOS.push(i, j, k);
+
+function evaluate5(c0, c1, c2, c3, c4) {
+  const r0 = c0 >> 2, r1 = c1 >> 2, r2 = c2 >> 2, r3 = c3 >> 2, r4 = c4 >> 2;
+  const s0 = c0 & 3, s1 = c1 & 3, s2 = c2 & 3, s3 = c3 & 3, s4 = c4 & 3;
+  let a = r0, b = r1, c = r2, d = r3, e = r4, t;
+  if (a < b) { t = a; a = b; b = t; }
+  if (d < e) { t = d; d = e; e = t; }
+  if (a < c) { t = a; a = c; c = t; }
+  if (b < c) { t = b; b = c; c = t; }
+  if (a < d) { t = a; a = d; d = t; }
+  if (c < d) { t = c; c = d; d = t; }
+  if (b < d) { t = b; b = d; d = t; }
+  if (b < c) { t = b; b = c; c = t; }
+  if (d < e) { t = d; d = e; e = t; }
+  const isFlush = (s0 === s1 && s1 === s2 && s2 === s3 && s3 === s4);
+  let isStraight = false, straightHigh = 0;
+  if (a !== b && b !== c && c !== d && d !== e) {
+    if (a - e === 4) { isStraight = true; straightHigh = a; }
+    else if (a === 12 && b === 3 && c === 2 && d === 1 && e === 0) { isStraight = true; straightHigh = 3; }
+  }
+  if (isStraight && isFlush) return (8 << 20) | (straightHigh << 16);
+  if (a === d || b === e) {
+    if (a === d) return (7 << 20) | (a << 16) | (e << 12);
+    else return (7 << 20) | (b << 16) | (a << 12);
+  }
+  if (a === c && d === e) return (6 << 20) | (a << 16) | (d << 12);
+  if (a === b && c === e) return (6 << 20) | (c << 16) | (a << 12);
+  if (isFlush) return (5 << 20) | (a << 16) | (b << 12) | (c << 8) | (d << 4) | e;
+  if (isStraight) return (4 << 20) | (straightHigh << 16);
+  if (a === c) return (3 << 20) | (a << 16) | (d << 12) | (e << 8);
+  if (b === d) return (3 << 20) | (b << 16) | (a << 12) | (e << 8);
+  if (c === e) return (3 << 20) | (c << 16) | (a << 12) | (b << 8);
+  if (a === b && c === d) return (2 << 20) | (a << 16) | (c << 12) | (e << 8);
+  if (a === b && d === e) return (2 << 20) | (a << 16) | (d << 12) | (c << 8);
+  if (b === c && d === e) return (2 << 20) | (b << 16) | (d << 12) | (a << 8);
+  if (a === b) return (1 << 20) | (a << 16) | (c << 12) | (d << 8) | (e << 4);
+  if (b === c) return (1 << 20) | (b << 16) | (a << 12) | (d << 8) | (e << 4);
+  if (c === d) return (1 << 20) | (c << 16) | (a << 12) | (b << 8) | (e << 4);
+  if (d === e) return (1 << 20) | (d << 16) | (a << 12) | (b << 8) | (c << 4);
+  return (a << 16) | (b << 12) | (c << 8) | (d << 4) | e;
+}
+
+function bestPLOScore(hole, board) {
+  let best = -1;
+  for (let hi = 0; hi < 30; hi += 2) {
+    const h0 = hole[HOLE_COMBOS[hi]], h1 = hole[HOLE_COMBOS[hi + 1]];
+    for (let bi = 0; bi < 30; bi += 3) {
+      const score = evaluate5(h0, h1, board[BOARD_COMBOS[bi]], board[BOARD_COMBOS[bi + 1]], board[BOARD_COMBOS[bi + 2]]);
+      if (score > best) best = score;
+    }
+  }
+  return best;
+}
+
+function shuffle(arr, len) {
+  for (let i = len - 1; i > 0; i--) {
+    const j = (Math.random() * (i + 1)) | 0;
+    const t = arr[i]; arr[i] = arr[j]; arr[j] = t;
+  }
+}
+
+self.onmessage = function(e) {
+  const { players, boards, numSims } = e.data;
+  const np = players.length;
+  const startTime = Date.now();
+
+  const used = new Uint8Array(52);
+  for (const hand of players) for (const c of hand) used[c] = 1;
+  for (const b of boards) for (const c of b) used[c] = 1;
+  const remaining = new Int32Array(52);
+  let remLen = 0;
+  for (let i = 0; i < 52; i++) if (!used[i]) remaining[remLen++] = i;
+
+  const needs = boards.map(b => 5 - b.length);
+  const fullBoards = [new Int32Array(5), new Int32Array(5), new Int32Array(5)];
+  for (let i = 0; i < 3; i++) for (let j = 0; j < boards[i].length; j++) fullBoards[i][j] = boards[i][j];
+
+  const wins = new Float64Array(np);
+  const draws = new Float64Array(np);
+  const losses = new Float64Array(np);
+  const scores = new Int32Array(np);
+  const points = new Float64Array(np);
+
+  const PROGRESS_INTERVAL = 2500;
+
+  for (let sim = 0; sim < numSims; sim++) {
+    shuffle(remaining, remLen);
+    let idx = 0;
+    for (let i = 0; i < 3; i++) {
+      const known = boards[i].length;
+      for (let j = known; j < 5; j++) fullBoards[i][j] = remaining[idx++];
+    }
+    for (let p = 0; p < np; p++) points[p] = 0;
+    for (let bi = 0; bi < 3; bi++) {
+      let maxScore = -1;
+      for (let p = 0; p < np; p++) {
+        scores[p] = bestPLOScore(players[p], fullBoards[bi]);
+        if (scores[p] > maxScore) maxScore = scores[p];
+      }
+      let wc = 0;
+      for (let p = 0; p < np; p++) if (scores[p] === maxScore) wc++;
+      const share = 1.0 / wc;
+      for (let p = 0; p < np; p++) if (scores[p] === maxScore) points[p] += share;
+    }
+    let maxPts = -1;
+    for (let p = 0; p < np; p++) if (points[p] > maxPts) maxPts = points[p];
+    let oc = 0;
+    for (let p = 0; p < np; p++) if (Math.abs(points[p] - maxPts) < 1e-9) oc++;
+    for (let p = 0; p < np; p++) {
+      if (Math.abs(points[p] - maxPts) < 1e-9) {
+        if (oc === 1) wins[p]++; else draws[p]++;
+      } else { losses[p]++; }
+    }
+
+    if ((sim + 1) % PROGRESS_INTERVAL === 0) {
+      self.postMessage({ type: 'progress', done: sim + 1, total: numSims });
+    }
+  }
+
+  const result = [];
+  for (let p = 0; p < np; p++) {
+    result.push({
+      win: wins[p] / numSims * 100,
+      draw: draws[p] / numSims * 100,
+      lose: losses[p] / numSims * 100,
+    });
+  }
+  const elapsed = Date.now() - startTime;
+  self.postMessage({ type: 'result', data: result, elapsed });
+};
+`;
+
+let worker = null;
+
+function createWorker() {
+  const blob = new Blob([workerCode], { type: 'application/javascript' });
+  return new Worker(URL.createObjectURL(blob));
+}
+
+function runSimulation() {
+  if (!allPlayersHave6() || state.running) return;
+  state.running = true;
+  state.results = null;
+
+  const progressWrap = document.getElementById('progress-wrap');
+  const progressBar = document.getElementById('progress-bar');
+  const progressText = document.getElementById('progress-text');
+  progressWrap.classList.add('visible');
+  progressBar.style.width = '0%';
+  progressText.textContent = 'Starting...';
+
+  document.getElementById('btn-run').disabled = true;
+  document.getElementById('results-panel').style.display = 'none';
+
+  const numSims = parseInt(document.getElementById('sim-count').value);
+
+  // Prepare data for worker
+  const players = [];
+  for (let p = 0; p < state.numPlayers; p++) {
+    players.push(state.players[p].slice());
+  }
+  const boards = [];
+  for (let b = 0; b < 3; b++) {
+    boards.push(state.boards[b].filter(c => c !== null));
+  }
+
+  if (worker) worker.terminate();
+  worker = createWorker();
+
+  worker.onmessage = function(e) {
+    const msg = e.data;
+    if (msg.type === 'progress') {
+      const pct = (msg.done / msg.total * 100).toFixed(0);
+      progressBar.style.width = pct + '%';
+      progressText.textContent = `${msg.done.toLocaleString()} / ${msg.total.toLocaleString()} simulations`;
+    } else if (msg.type === 'result') {
+      state.results = msg.data;
+      state.running = false;
+      progressBar.style.width = '100%';
+      const secs = (msg.elapsed / 1000).toFixed(2);
+      progressText.textContent = `Done! ${numSims.toLocaleString()} simulations in ${secs}s`;
+      document.getElementById('results-time').textContent = `${numSims.toLocaleString()} sims in ${secs}s`;
+      render();
+      worker.terminate();
+      worker = null;
+    }
+  };
+
+  worker.postMessage({ players, boards, numSims });
+}
+
+// ── Event Bindings ─────────────────────────────────────────────────────────
+document.getElementById('btn-add-player').addEventListener('click', addPlayer);
+document.getElementById('btn-remove-player').addEventListener('click', removePlayer);
+document.getElementById('btn-deal').addEventListener('click', dealRemaining);
+document.getElementById('btn-clear').addEventListener('click', clearAll);
+document.getElementById('btn-run').addEventListener('click', runSimulation);
+
+document.getElementById('btn-toggle-input').addEventListener('click', () => {
+  if (state.inputMode === 'picker') {
+    state.inputMode = 'text';
+    document.getElementById('picker-area').style.display = 'none';
+    document.getElementById('text-input-area').classList.add('visible');
+    document.getElementById('btn-toggle-input').textContent = 'Switch to Card Picker';
+    renderTextInputs();
+  } else {
+    state.inputMode = 'picker';
+    document.getElementById('picker-area').style.display = 'block';
+    document.getElementById('text-input-area').classList.remove('visible');
+    document.getElementById('btn-toggle-input').textContent = 'Switch to Text Input';
+  }
+});
+
+// Keyboard: Escape to deselect, Delete/Backspace to remove active slot card
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') {
+    state.activeSlot = null;
+    render();
+  }
+  if ((e.key === 'Delete' || e.key === 'Backspace') && state.activeSlot && !e.target.matches('input')) {
+    const { type, index, cardIndex } = state.activeSlot;
+    if (type === 'player') state.players[index][cardIndex] = null;
+    else state.boards[index][cardIndex] = null;
+    state.results = null;
+    render();
+  }
+});
+
+// ── Initial Render ─────────────────────────────────────────────────────────
+// Set first empty slot as active
+state.activeSlot = { type: 'player', index: 0, cardIndex: 0 };
+render();
+</script>
+</body>
+</html>
