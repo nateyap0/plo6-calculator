@@ -55,7 +55,9 @@ h1 { font-size: 1.6em; text-align: center; color: var(--accent); margin-bottom: 
 .card-slot.filled.suit-black { color: #1a1a2e; }
 
 /* Board section */
-.board-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.board-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; padding: 10px 12px; border-radius: 8px; border-left: 3px solid transparent; cursor: pointer; transition: all 0.12s; }
+.board-row:hover { background: #1c2333; }
+.board-row.active { background: #1c2333; border-left-color: var(--accent); }
 .board-label { min-width: 60px; font-size: 0.85em; font-weight: 600; color: var(--text-dim); }
 .board-cards { display: flex; gap: 3px; }
 .board-cards .card-slot { width: 48px; height: 64px; }
@@ -115,7 +117,9 @@ h1 { font-size: 1.6em; text-align: center; color: var(--accent); margin-bottom: 
 .progress-text { font-size: 0.78em; color: var(--text-dim); margin-top: 3px; }
 
 /* Range mode */
-.player-row-wrap { margin-bottom: 8px; }
+.player-row-wrap { margin-bottom: 8px; padding: 10px 12px; border-radius: 8px; border-left: 3px solid transparent; cursor: pointer; transition: all 0.12s; }
+.player-row-wrap:hover { background: #1c2333; }
+.player-row-wrap.active { background: #1c2333; border-left-color: var(--accent); }
 .range-controls { display: flex; align-items: center; gap: 6px; margin: 4px 0 0 78px; flex-wrap: wrap; }
 .range-controls .suit-btn {
   padding: 4px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 5px;
@@ -279,7 +283,8 @@ function renderPlayers() {
   let html = '';
   for (let p = 0; p < state.numPlayers; p++) {
     const rng = state.playerRanges[p];
-    html += `<div class="player-row-wrap">`;
+    const isActiveRow = state.activeSlot && state.activeSlot.type === 'player' && state.activeSlot.index === p;
+    html += `<div class="player-row-wrap ${isActiveRow ? 'active' : ''}" data-player="${p}">`;
     html += `<div class="player-row"><div class="player-label">Player ${p + 1}</div><div class="card-slots">`;
 
     for (let c = 0; c < 6; c++) {
@@ -366,6 +371,20 @@ function renderPlayers() {
     });
   });
 
+  area.querySelectorAll('.player-row-wrap[data-player]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('.card-slot') || e.target.closest('button')) return;
+      const p = parseInt(el.dataset.player);
+      for (let c = 0; c < 6; c++) {
+        if (state.players[p][c] === null) {
+          state.activeSlot = { type: 'player', index: p, cardIndex: c };
+          render();
+          return;
+        }
+      }
+    });
+  });
+
   document.getElementById('btn-add-player').disabled = state.numPlayers >= 6;
   document.getElementById('btn-remove-player').disabled = state.numPlayers <= 2;
 }
@@ -374,7 +393,8 @@ function renderBoards() {
   const area = document.getElementById('boards-area');
   let html = '';
   for (let b = 0; b < 3; b++) {
-    html += `<div class="board-row"><div class="board-label">Board ${b + 1}</div><div class="board-cards">`;
+    const isActiveRow = state.activeSlot && state.activeSlot.type === 'board' && state.activeSlot.index === b;
+    html += `<div class="board-row ${isActiveRow ? 'active' : ''}" data-board="${b}"><div class="board-label">Board ${b + 1}</div><div class="board-cards">`;
     for (let c = 0; c < 5; c++) {
       const card = state.boards[b][c];
       const isActive = state.activeSlot && state.activeSlot.type === 'board' && state.activeSlot.index === b && state.activeSlot.cardIndex === c;
@@ -419,6 +439,20 @@ function renderBoards() {
       state.boards[b].fill(null);
       state.results = null;
       render();
+    });
+  });
+
+  area.querySelectorAll('.board-row[data-board]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      if (e.target.closest('.card-slot') || e.target.closest('button')) return;
+      const b = parseInt(el.dataset.board);
+      for (let c = 0; c < 5; c++) {
+        if (state.boards[b][c] === null) {
+          state.activeSlot = { type: 'board', index: b, cardIndex: c };
+          render();
+          return;
+        }
+      }
     });
   });
 }
