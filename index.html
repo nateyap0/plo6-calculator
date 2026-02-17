@@ -33,7 +33,7 @@ h1 { font-size: 1.6em; text-align: center; color: var(--accent); margin-bottom: 
 .btn-sm { padding: 4px 10px; font-size: 0.78em; }
 
 /* Player rows */
-.player-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; flex-wrap: wrap; }
+.player-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .player-label { min-width: 70px; font-size: 0.85em; font-weight: 600; color: var(--text-dim); }
 
 /* Card slots */
@@ -114,6 +114,26 @@ h1 { font-size: 1.6em; text-align: center; color: var(--accent); margin-bottom: 
 .progress-bar-inner { height: 100%; background: var(--accent); width: 0%; transition: width 0.1s; }
 .progress-text { font-size: 0.78em; color: var(--text-dim); margin-top: 3px; }
 
+/* Range mode */
+.player-row-wrap { margin-bottom: 8px; }
+.range-controls { display: flex; align-items: center; gap: 6px; margin: 4px 0 0 78px; flex-wrap: wrap; }
+.range-controls .suit-btn {
+  padding: 4px 8px; background: var(--bg); border: 1px solid var(--border); border-radius: 5px;
+  color: var(--text); font-size: 0.78em; cursor: pointer;
+}
+.suit-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(15,155,88,0.12); }
+.suit-btn:hover { border-color: var(--text-dim); }
+.btn-range { padding: 3px 8px; font-size: 0.72em; border-radius: 4px; }
+.btn-range.active { border-color: var(--accent); color: var(--accent); background: rgba(15,155,88,0.12); }
+.card-slot.range-x {
+  border: 2px dashed var(--border); background: rgba(255,255,255,0.03);
+  color: var(--text-dim); font-size: 1.1em; font-weight: 600; font-family: 'Courier New', monospace;
+  cursor: pointer;
+}
+.card-slot.range-x:hover { border-color: var(--text-dim); }
+.btn-clear-row { padding: 2px 7px; font-size: 0.82em; border-radius: 4px; line-height: 1; color: var(--text-dim); border-color: transparent; background: transparent; }
+.btn-clear-row:hover { color: var(--red); border-color: var(--red); }
+
 /* Mobile */
 @media (max-width: 600px) {
   body { padding: 6px; }
@@ -123,6 +143,7 @@ h1 { font-size: 1.6em; text-align: center; color: var(--accent); margin-bottom: 
   .picker-card { font-size: 0.6em; }
   .result-nums { min-width: auto; flex-wrap: wrap; gap: 6px; }
   .player-label, .board-label { min-width: 55px; font-size: 0.78em; }
+  .range-controls { margin-left: 63px; }
 }
 </style>
 </head>
@@ -218,6 +239,7 @@ function parseCardStr(r, s) {
 const state = {
   numPlayers: 2,
   players: [Array(6).fill(null), Array(6).fill(null)],
+  playerRanges: [null, null], // null = specific cards, { suitMode:'any'|'ss'|'ds'|'ts' }
   boards: [Array(5).fill(null), Array(5).fill(null), Array(5).fill(null)],
   activeSlot: null, // {type:'player'|'board', index, cardIndex}
   inputMode: 'picker',
@@ -227,13 +249,16 @@ const state = {
 
 function usedCards() {
   const s = new Set();
-  for (const p of state.players) for (const c of p) if (c !== null) s.add(c);
+  for (let i = 0; i < state.numPlayers; i++) {
+    for (const c of state.players[i]) if (c !== null) s.add(c);
+  }
   for (const b of state.boards) for (const c of b) if (c !== null) s.add(c);
   return s;
 }
 
 function allPlayersHave6() {
   for (let i = 0; i < state.numPlayers; i++) {
+    if (state.playerRanges[i]) continue; // range players are always ready
     if (state.players[i].some(c => c === null)) return false;
   }
   return true;
@@ -250,46 +275,97 @@ function renderSlot(card, isActive) {
 
 function renderPlayers() {
   const area = document.getElementById('players-area');
+  const SUIT_MODES = [{id:'any',label:'Any'},{id:'ss',label:'SS'},{id:'ds',label:'DS'},{id:'ts',label:'TS'}];
   let html = '';
   for (let p = 0; p < state.numPlayers; p++) {
+    const rng = state.playerRanges[p];
+    html += `<div class="player-row-wrap">`;
     html += `<div class="player-row"><div class="player-label">Player ${p + 1}</div><div class="card-slots">`;
+
     for (let c = 0; c < 6; c++) {
       const card = state.players[p][c];
       const isActive = state.activeSlot && state.activeSlot.type === 'player' && state.activeSlot.index === p && state.activeSlot.cardIndex === c;
       const filled = card !== null;
       const colorClass = filled ? (isRedSuit(card) ? 'suit-red' : 'suit-black') : '';
-      html += `<div class="card-slot ${isActive ? 'active' : ''} ${filled ? 'filled' : ''} ${colorClass}" data-type="player" data-index="${p}" data-ci="${c}">`;
-      if (filled) {
-        html += `<span class="card-rank">${cardRankChar(card)}</span><span class="card-suit">${cardSuitSymbol(card)}</span>`;
+      if (rng && !filled) {
+        html += `<div class="card-slot range-x ${isActive ? 'active' : ''}" data-type="player" data-index="${p}" data-ci="${c}">X</div>`;
       } else {
-        html += `<span style="font-size:1.1em;color:var(--text-dim);">+</span>`;
+        html += `<div class="card-slot ${isActive ? 'active' : ''} ${filled ? 'filled' : ''} ${colorClass}" data-type="player" data-index="${p}" data-ci="${c}">`;
+        if (filled) {
+          html += `<span class="card-rank">${cardRankChar(card)}</span><span class="card-suit">${cardSuitSymbol(card)}</span>`;
+        } else {
+          html += `<span style="font-size:1.1em;color:var(--text-dim);">+</span>`;
+        }
+        html += `</div>`;
+      }
+    }
+
+    html += `</div>`;
+    html += `<button class="btn btn-sm btn-range ${rng ? 'active' : ''}" data-range-toggle="${p}">Range</button>`;
+    html += `<button class="btn btn-sm btn-clear-row" data-clear-player="${p}" title="Clear player">\u00d7</button>`;
+    html += `</div>`;
+
+    if (rng) {
+      html += `<div class="range-controls">`;
+      for (const sm of SUIT_MODES) {
+        html += `<button class="suit-btn ${rng.suitMode === sm.id ? 'active' : ''}" data-range-suit="${p}" data-suit="${sm.id}">${sm.label}</button>`;
       }
       html += `</div>`;
     }
-    html += `</div></div>`;
+
+    html += `</div>`;
   }
   area.innerHTML = html;
 
-  // Bind click
-  area.querySelectorAll('.card-slot').forEach(el => {
+  area.querySelectorAll('.card-slot[data-type="player"]').forEach(el => {
     el.addEventListener('click', () => {
-      const t = el.dataset.type;
       const idx = parseInt(el.dataset.index);
       const ci = parseInt(el.dataset.ci);
       const card = state.players[idx][ci];
       if (card !== null) {
-        // Remove card
         state.players[idx][ci] = null;
         state.results = null;
         render();
         return;
       }
-      state.activeSlot = { type: t, index: idx, cardIndex: ci };
+      state.activeSlot = { type: 'player', index: idx, cardIndex: ci };
       render();
     });
   });
 
-  // Update add/remove buttons
+  area.querySelectorAll('[data-range-toggle]').forEach(el => {
+    el.addEventListener('click', () => {
+      const p = parseInt(el.dataset.rangeToggle);
+      if (state.playerRanges[p]) {
+        state.playerRanges[p] = null;
+      } else {
+        state.players[p].fill(null);
+        state.playerRanges[p] = { suitMode: 'any' };
+      }
+      state.activeSlot = null;
+      state.results = null;
+      render();
+    });
+  });
+
+  area.querySelectorAll('[data-range-suit]').forEach(el => {
+    el.addEventListener('click', () => {
+      const p = parseInt(el.dataset.rangeSuit);
+      state.playerRanges[p].suitMode = el.dataset.suit;
+      state.results = null;
+      render();
+    });
+  });
+
+  area.querySelectorAll('[data-clear-player]').forEach(el => {
+    el.addEventListener('click', () => {
+      const p = parseInt(el.dataset.clearPlayer);
+      state.players[p].fill(null);
+      state.results = null;
+      render();
+    });
+  });
+
   document.getElementById('btn-add-player').disabled = state.numPlayers >= 6;
   document.getElementById('btn-remove-player').disabled = state.numPlayers <= 2;
 }
@@ -316,7 +392,7 @@ function renderBoards() {
       }
       html += `</div>`;
     }
-    html += `</div></div>`;
+    html += `</div><button class="btn btn-sm btn-clear-row" data-clear-board="${b}" title="Clear board">\u00d7</button></div>`;
   }
   area.innerHTML = html;
 
@@ -336,6 +412,15 @@ function renderBoards() {
       render();
     });
   });
+
+  area.querySelectorAll('[data-clear-board]').forEach(el => {
+    el.addEventListener('click', () => {
+      const b = parseInt(el.dataset.clearBoard);
+      state.boards[b].fill(null);
+      state.results = null;
+      render();
+    });
+  });
 }
 
 function renderPicker() {
@@ -343,7 +428,7 @@ function renderPicker() {
   const used = usedCards();
   let html = '';
   // Layout: 4 rows (suits) x 13 cols (ranks), order: A23456789TJKQ
-  const PICKER_ORDER = [12,0,1,2,3,4,5,6,7,8,9,11,10];
+  const PICKER_ORDER = [12,0,1,2,3,4,5,6,7,8,9,10,11];
   for (let s = 0; s < 4; s++) {
     for (let ri = 0; ri < 13; ri++) {
       const r = PICKER_ORDER[ri];
@@ -370,6 +455,15 @@ function renderTextInputs() {
   const area = document.getElementById('text-input-area');
   let html = '';
   for (let p = 0; p < state.numPlayers; p++) {
+    if (state.playerRanges[p]) {
+      const rng = state.playerRanges[p];
+      const known = state.players[p].filter(c => c !== null);
+      const knownStr = known.map(c => RANK_CHARS[c >> 2] + SUITS_STR[c & 3]).join('');
+      const numRandom = 6 - known.length;
+      const xStr = 'x'.repeat(numRandom * 2);
+      html += `<div class="text-row"><label>Player ${p + 1}:</label><span style="color:var(--accent);font-size:0.85em;">${knownStr}${xStr} (${rng.suitMode})</span></div>`;
+      continue;
+    }
     const current = state.players[p].filter(c => c !== null).map(c => RANK_CHARS[c >> 2] + SUITS_STR[c & 3]).join('');
     html += `<div class="text-row"><label>Player ${p + 1}:</label><input type="text" maxlength="12" placeholder="e.g. AhKsQdJc9s8d" data-type="player" data-index="${p}" value="${current}"></div>`;
   }
@@ -394,8 +488,20 @@ function renderResults() {
     const wPct = r.win.toFixed(1);
     const dPct = r.draw.toFixed(1);
     const lPct = r.lose.toFixed(1);
+    const rng = state.playerRanges[p];
+    let label = `Player ${p + 1}`;
+    if (rng) {
+      const known = state.players[p].filter(c => c !== null);
+      const numRandom = 6 - known.length;
+      if (known.length === 0) {
+        label = `P${p+1} ${numRandom}x (${rng.suitMode})`;
+      } else {
+        const knownStr = known.map(c => RANK_CHARS[c >> 2] + SUITS_STR[c & 3]).join('');
+        label = `P${p+1} ${knownStr}+${numRandom}x (${rng.suitMode})`;
+      }
+    }
     html += `<div class="result-row">
-      <div class="result-name">Player ${p + 1}</div>
+      <div class="result-name">${label}</div>
       <div class="result-bars">
         <div class="bar-win" style="width:${r.win}%">${r.win >= 5 ? wPct + '%' : ''}</div>
         <div class="bar-draw" style="width:${r.draw}%">${r.draw >= 5 ? dPct + '%' : ''}</div>
@@ -456,9 +562,10 @@ function findNextEmpty(after) {
     startCi = 0;
   }
 
-  // Search players
+  // Search players (skip range players, but continue within the same range player)
   if (startType === 'player') {
     for (let p = startIdx; p < state.numPlayers; p++) {
+      if (state.playerRanges[p] && !(after && after.type === 'player' && after.index === p)) continue;
       const ci0 = (p === startIdx) ? startCi : 0;
       for (let c = ci0; c < 6; c++) {
         if (state.players[p][c] === null) return { type: 'player', index: p, cardIndex: c };
@@ -480,8 +587,9 @@ function findNextEmpty(after) {
     }
   }
 
-  // Wrap around: search from beginning
+  // Wrap around: search from beginning (skip range-mode players)
   for (let p = 0; p < state.numPlayers; p++) {
+    if (state.playerRanges[p]) continue;
     for (let c = 0; c < 6; c++) {
       if (state.players[p][c] === null) return { type: 'player', index: p, cardIndex: c };
     }
@@ -499,8 +607,8 @@ function findNextEmpty(after) {
 function applyTextInputs() {
   const area = document.getElementById('text-input-area');
   const inputs = area.querySelectorAll('input');
-  // Clear all first
-  for (let p = 0; p < 6; p++) if (state.players[p]) state.players[p].fill(null);
+  // Clear all specific players first (skip range players)
+  for (let p = 0; p < 6; p++) if (state.players[p] && !state.playerRanges[p]) state.players[p].fill(null);
   for (let b = 0; b < 3; b++) state.boards[b].fill(null);
 
   const allCards = new Set();
@@ -552,6 +660,7 @@ function dealRemaining() {
   }
   let di = 0;
   for (let p = 0; p < state.numPlayers; p++) {
+    if (state.playerRanges[p]) continue;
     for (let c = 0; c < 6; c++) {
       if (state.players[p][c] === null && di < deck.length) state.players[p][c] = deck[di++];
     }
@@ -568,6 +677,7 @@ function dealRemaining() {
 
 function clearAll() {
   for (let p = 0; p < state.players.length; p++) state.players[p].fill(null);
+  for (let p = 0; p < state.playerRanges.length; p++) state.playerRanges[p] = null;
   for (let b = 0; b < 3; b++) state.boards[b].fill(null);
   state.activeSlot = null;
   state.results = null;
@@ -578,16 +688,21 @@ function clearAll() {
 function addPlayer() {
   if (state.numPlayers >= 6) return;
   state.numPlayers++;
-  if (state.players.length < state.numPlayers) state.players.push(Array(6).fill(null));
-  else state.players[state.numPlayers - 1] = Array(6).fill(null);
+  if (state.players.length < state.numPlayers) {
+    state.players.push(Array(6).fill(null));
+    state.playerRanges.push(null);
+  } else {
+    state.players[state.numPlayers - 1] = Array(6).fill(null);
+    state.playerRanges[state.numPlayers - 1] = null;
+  }
   state.results = null;
   render();
 }
 
 function removePlayer() {
   if (state.numPlayers <= 2) return;
-  // Clear the last player's cards
   state.players[state.numPlayers - 1].fill(null);
+  state.playerRanges[state.numPlayers - 1] = null;
   state.numPlayers--;
   state.activeSlot = null;
   state.results = null;
@@ -661,21 +776,61 @@ function shuffle(arr, len) {
   }
 }
 
+function countSuitedComponents(hand) {
+  const sc = [0,0,0,0];
+  for (let i = 0; i < 6; i++) sc[hand[i] & 3]++;
+  let n = 0;
+  for (let s = 0; s < 4; s++) if (sc[s] >= 2) n++;
+  return n;
+}
+
 self.onmessage = function(e) {
   const { players, boards, numSims } = e.data;
   const np = players.length;
   const startTime = Date.now();
 
-  const used = new Uint8Array(52);
-  for (const hand of players) for (const c of hand) used[c] = 1;
-  for (const b of boards) for (const c of b) used[c] = 1;
-  const remaining = new Int32Array(52);
-  let remLen = 0;
-  for (let i = 0; i < 52; i++) if (!used[i]) remaining[remLen++] = i;
+  const isRange = new Uint8Array(np);
+  const rangeDefs = [];
+  for (let p = 0; p < np; p++) {
+    if (players[p].range) {
+      isRange[p] = 1;
+      const sm = players[p].suitMode;
+      rangeDefs[p] = {
+        knownCards: players[p].knownCards,
+        numRandom: players[p].numRandom,
+        suitMode: sm,
+        suitTarget: sm === 'ss' ? 1 : sm === 'ds' ? 2 : sm === 'ts' ? 3 : 0
+      };
+    }
+  }
 
-  const needs = boards.map(b => 5 - b.length);
+  const baseUsed = new Uint8Array(52);
+  for (let p = 0; p < np; p++) {
+    if (isRange[p]) {
+      for (const c of rangeDefs[p].knownCards) baseUsed[c] = 1;
+    } else {
+      for (const c of players[p]) baseUsed[c] = 1;
+    }
+  }
+  for (const b of boards) for (const c of b) baseUsed[c] = 1;
+
+  const baseDeck = [];
+  for (let i = 0; i < 52; i++) if (!baseUsed[i]) baseDeck.push(i);
+
   const fullBoards = [new Int32Array(5), new Int32Array(5), new Int32Array(5)];
   for (let i = 0; i < 3; i++) for (let j = 0; j < boards[i].length; j++) fullBoards[i][j] = boards[i][j];
+
+  const simHands = [];
+  for (let p = 0; p < np; p++) {
+    if (isRange[p]) {
+      const h = new Int32Array(6);
+      const kc = rangeDefs[p].knownCards;
+      for (let i = 0; i < kc.length; i++) h[i] = kc[i];
+      simHands[p] = h;
+    } else {
+      simHands[p] = players[p];
+    }
+  }
 
   const wins = new Float64Array(np);
   const draws = new Float64Array(np);
@@ -684,51 +839,139 @@ self.onmessage = function(e) {
   const points = new Float64Array(np);
 
   const PROGRESS_INTERVAL = 2500;
+  const hasRanges = isRange.indexOf(1) !== -1;
+  let validSims = 0;
 
-  for (let sim = 0; sim < numSims; sim++) {
-    shuffle(remaining, remLen);
-    let idx = 0;
-    for (let i = 0; i < 3; i++) {
-      const known = boards[i].length;
-      for (let j = known; j < 5; j++) fullBoards[i][j] = remaining[idx++];
-    }
-    for (let p = 0; p < np; p++) points[p] = 0;
-    for (let bi = 0; bi < 3; bi++) {
-      let maxScore = -1;
-      for (let p = 0; p < np; p++) {
-        scores[p] = bestPLOScore(players[p], fullBoards[bi]);
-        if (scores[p] > maxScore) maxScore = scores[p];
+  if (!hasRanges) {
+    const remaining = new Int32Array(baseDeck);
+    const remLen = remaining.length;
+
+    for (let sim = 0; sim < numSims; sim++) {
+      shuffle(remaining, remLen);
+      let idx = 0;
+      for (let i = 0; i < 3; i++) {
+        const known = boards[i].length;
+        for (let j = known; j < 5; j++) fullBoards[i][j] = remaining[idx++];
       }
-      let wc = 0;
-      for (let p = 0; p < np; p++) if (scores[p] === maxScore) wc++;
-      const share = 1.0 / wc;
-      for (let p = 0; p < np; p++) if (scores[p] === maxScore) points[p] += share;
+      for (let p = 0; p < np; p++) points[p] = 0;
+      for (let bi = 0; bi < 3; bi++) {
+        let maxScore = -1;
+        for (let p = 0; p < np; p++) {
+          scores[p] = bestPLOScore(players[p], fullBoards[bi]);
+          if (scores[p] > maxScore) maxScore = scores[p];
+        }
+        let wc = 0;
+        for (let p = 0; p < np; p++) if (scores[p] === maxScore) wc++;
+        const share = 1.0 / wc;
+        for (let p = 0; p < np; p++) if (scores[p] === maxScore) points[p] += share;
+      }
+      let maxPts = -1;
+      for (let p = 0; p < np; p++) if (points[p] > maxPts) maxPts = points[p];
+      let oc = 0;
+      for (let p = 0; p < np; p++) if (Math.abs(points[p] - maxPts) < 1e-9) oc++;
+      for (let p = 0; p < np; p++) {
+        if (Math.abs(points[p] - maxPts) < 1e-9) {
+          if (oc === 1) wins[p]++; else draws[p]++;
+        } else { losses[p]++; }
+      }
+      validSims++;
+      if ((sim + 1) % PROGRESS_INTERVAL === 0) {
+        self.postMessage({ type: 'progress', done: sim + 1, total: numSims });
+      }
     }
-    let maxPts = -1;
-    for (let p = 0; p < np; p++) if (points[p] > maxPts) maxPts = points[p];
-    let oc = 0;
-    for (let p = 0; p < np; p++) if (Math.abs(points[p] - maxPts) < 1e-9) oc++;
-    for (let p = 0; p < np; p++) {
-      if (Math.abs(points[p] - maxPts) < 1e-9) {
-        if (oc === 1) wins[p]++; else draws[p]++;
-      } else { losses[p]++; }
-    }
+  } else {
+    const dLen = baseDeck.length;
+    const deck = new Int32Array(dLen);
 
-    if ((sim + 1) % PROGRESS_INTERVAL === 0) {
-      self.postMessage({ type: 'progress', done: sim + 1, total: numSims });
+    for (let sim = 0; sim < numSims; sim++) {
+      for (let i = 0; i < dLen; i++) deck[i] = baseDeck[i];
+      shuffle(deck, dLen);
+
+      let pos = 0;
+      let rangeOk = true;
+
+      for (let p = 0; p < np; p++) {
+        if (!isRange[p]) continue;
+        const rd = rangeDefs[p];
+        if (rd.numRandom === 0) continue;
+
+        const kLen = rd.knownCards.length;
+
+        if (rd.suitTarget === 0) {
+          for (let i = 0; i < rd.numRandom; i++) simHands[p][kLen + i] = deck[pos + i];
+          pos += rd.numRandom;
+        } else {
+          const remLen = dLen - pos;
+          let accepted = false;
+          for (let attempt = 0; attempt < 100; attempt++) {
+            for (let i = 0; i < rd.numRandom && i < remLen - 1; i++) {
+              const j = i + ((Math.random() * (remLen - i)) | 0);
+              const a = pos + i, b2 = pos + j;
+              const t = deck[a]; deck[a] = deck[b2]; deck[b2] = t;
+            }
+            for (let i = 0; i < rd.numRandom; i++) simHands[p][kLen + i] = deck[pos + i];
+            if (countSuitedComponents(simHands[p]) === rd.suitTarget) {
+              accepted = true;
+              break;
+            }
+          }
+          if (!accepted) { rangeOk = false; break; }
+          pos += rd.numRandom;
+        }
+      }
+
+      if (!rangeOk) {
+        if ((sim + 1) % PROGRESS_INTERVAL === 0) {
+          self.postMessage({ type: 'progress', done: sim + 1, total: numSims });
+        }
+        continue;
+      }
+
+      for (let i = 0; i < 3; i++) {
+        const known = boards[i].length;
+        for (let j = known; j < 5; j++) fullBoards[i][j] = deck[pos++];
+      }
+
+      for (let p = 0; p < np; p++) points[p] = 0;
+      for (let bi = 0; bi < 3; bi++) {
+        let maxScore = -1;
+        for (let p = 0; p < np; p++) {
+          scores[p] = bestPLOScore(simHands[p], fullBoards[bi]);
+          if (scores[p] > maxScore) maxScore = scores[p];
+        }
+        let wc = 0;
+        for (let p = 0; p < np; p++) if (scores[p] === maxScore) wc++;
+        const share = 1.0 / wc;
+        for (let p = 0; p < np; p++) if (scores[p] === maxScore) points[p] += share;
+      }
+      let maxPts = -1;
+      for (let p = 0; p < np; p++) if (points[p] > maxPts) maxPts = points[p];
+      let oc = 0;
+      for (let p = 0; p < np; p++) if (Math.abs(points[p] - maxPts) < 1e-9) oc++;
+      for (let p = 0; p < np; p++) {
+        if (Math.abs(points[p] - maxPts) < 1e-9) {
+          if (oc === 1) wins[p]++; else draws[p]++;
+        } else { losses[p]++; }
+      }
+      validSims++;
+
+      if ((sim + 1) % PROGRESS_INTERVAL === 0) {
+        self.postMessage({ type: 'progress', done: sim + 1, total: numSims });
+      }
     }
   }
 
+  const denom = validSims || 1;
   const result = [];
   for (let p = 0; p < np; p++) {
     result.push({
-      win: wins[p] / numSims * 100,
-      draw: draws[p] / numSims * 100,
-      lose: losses[p] / numSims * 100,
+      win: wins[p] / denom * 100,
+      draw: draws[p] / denom * 100,
+      lose: losses[p] / denom * 100,
     });
   }
   const elapsed = Date.now() - startTime;
-  self.postMessage({ type: 'result', data: result, elapsed });
+  self.postMessage({ type: 'result', data: result, elapsed, validSims });
 };
 `;
 
@@ -759,7 +1002,12 @@ function runSimulation() {
   // Prepare data for worker
   const players = [];
   for (let p = 0; p < state.numPlayers; p++) {
-    players.push(state.players[p].slice());
+    if (state.playerRanges[p]) {
+      const knownCards = state.players[p].filter(c => c !== null);
+      players.push({ range: true, knownCards, numRandom: 6 - knownCards.length, suitMode: state.playerRanges[p].suitMode });
+    } else {
+      players.push(state.players[p].slice());
+    }
   }
   const boards = [];
   for (let b = 0; b < 3; b++) {
@@ -780,8 +1028,9 @@ function runSimulation() {
       state.running = false;
       progressBar.style.width = '100%';
       const secs = (msg.elapsed / 1000).toFixed(2);
-      progressText.textContent = `Done! ${numSims.toLocaleString()} simulations in ${secs}s`;
-      document.getElementById('results-time').textContent = `${numSims.toLocaleString()} sims in ${secs}s`;
+      const validLabel = msg.validSims < numSims ? ` (${msg.validSims.toLocaleString()} valid)` : '';
+      progressText.textContent = `Done! ${numSims.toLocaleString()} simulations in ${secs}s${validLabel}`;
+      document.getElementById('results-time').textContent = `${numSims.toLocaleString()} sims in ${secs}s${validLabel}`;
       render();
       worker.terminate();
       worker = null;
